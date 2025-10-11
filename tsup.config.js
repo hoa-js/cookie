@@ -3,7 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig([
   // ESM build
   {
-    entry: 'src/index.ts',
+    entry: ['src/index.ts'],
     format: 'esm',
     dts: true,
     splitting: false,
