@@ -1,4 +1,4 @@
-import { Decoder, Cookie, SignedCookie, CookieAdapterOptions, CookieOptions, CookieConstraint } from './types/index.ts'
+import { Decoder, Cookie, SignedCookie, Secret, CookieOptions, CookieConstraint } from './types/index.ts'
 // all alphanumeric chars and all of _!#$%&'*.^`|~+-
 // (see: https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1)
 const validCookieNameRegEx = /^[\w!#$%&'*.^`|~+-]+$/
@@ -14,7 +14,7 @@ const signConfig = {
   algorithm: { name: 'HMAC', hash: 'SHA-256' },
   secret: null
 }
-export const setSignConfig = (secret: CookieAdapterOptions['secret']) => {
+export const setSignConfig = (secret: Secret) => {
   signConfig.secret = secret
 }
 
@@ -51,7 +51,7 @@ export const parse = (cookie: string, name?: string): Cookie => {
   return parsedCookie
 }
 
-export const parseSigned = async (cookie: string, secret: CookieAdapterOptions['secret'], name?: string) => {
+export const parseSigned = async (cookie: string, secret: Secret, name?: string) => {
   const parsedCookie: SignedCookie = {}
   const secretKey = await getCryptoKey(secret)
   for (const [key, value] of Object.entries(parse(cookie, name))) {
@@ -113,7 +113,7 @@ export const tryDecode = (str: string, decoder: Decoder): string => {
     })
   }
 }
-export const generateSignedCookie = async (name: string, value: string, secret: CookieAdapterOptions['secret'], opt: CookieOptions): Promise<string> => {
+export const generateSignedCookie = async (name: string, value: string, secret: Secret, opt: CookieOptions): Promise<string> => {
   let cookie: string
   if (opt?.prefix === 'secure') {
     cookie = await serializeSigned('__Secure-' + name, value, secret, { path: '/', ...opt, secure: true })
@@ -148,7 +148,7 @@ export const generateCookie = (name: string, value: string, opt?: CookieOptions)
 export const serializeSigned = async (
   name: string,
   value: string,
-  secret: CookieAdapterOptions['secret'],
+  secret: Secret,
   opt: CookieOptions = {}
 ): Promise<string> => {
   const signature = await makeSignature(value, secret)

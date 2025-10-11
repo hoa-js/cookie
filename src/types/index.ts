@@ -42,8 +42,10 @@ type HostCookieConstraint = { secure: true; path: '/'; domain?: undefined }
 
 export type CookiePrefixOptions = 'host' | 'secure'
 
+export type Secret = string | BufferSource
+
 export type CookieAdapterOptions = {
-  secret?: string | BufferSource
+  secret?: Secret
   signed?: boolean
   defaultOptions?: CookieOptions
 }
