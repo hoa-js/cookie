@@ -3,7 +3,7 @@ import {
   parseSignedCookie,
   generateSignedCookie,
   generateCookie
-} from './cookie.js'
+} from './cookie.ts'
 import type {
   Cookie,
   CookiePrefixOptions,
@@ -13,12 +13,12 @@ import type {
   SetCookie,
   DeleteCookie,
   SignedCookie,
-} from './types/index.js'
+} from './types/index.ts'
 
 const DEFAULT_ADAPTER_OPTIONS: CookieAdapterOptions = {
   secret: undefined,
-  signed: false,
   defaultOptions: {
+    signed: false,
     path: '/',
     httpOnly: true,
     secure: false,
@@ -50,7 +50,7 @@ export function cookie (options: CookieAdapterOptions = DEFAULT_ADAPTER_OPTIONS)
       }
 
       if (signed) {
-        if (!cookieHeader) return undefined
+        if (!cookieHeader || !options.secret) return undefined
         const finalName = resolveNameWithPrefix(name) as string
         const obj = await parseSignedCookie(cookieHeader, options.secret, finalName)
         return (obj as SignedCookie)[finalName]
@@ -69,6 +69,9 @@ export function cookie (options: CookieAdapterOptions = DEFAULT_ADAPTER_OPTIONS)
       const cookieOptions = opts || options.defaultOptions
       const isSigned = Boolean(cookieOptions?.signed)
       if (isSigned) {
+        if (!options.secret) {
+          throw new Error('secret is required when signed is true')
+        }
         const cookie = await generateSignedCookie(name, value, options.secret, cookieOptions)
         this.append('Set-Cookie', cookie)
         return

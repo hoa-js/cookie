@@ -1,4 +1,4 @@
-import { Decoder, Cookie, SignedCookie, Secret, CookieOptions, CookieConstraint } from './types/index.js'
+import { Decoder, Cookie, SignedCookie, Secret, CookieOptions, CookieConstraint } from './types/index.ts'
 // all alphanumeric chars and all of _!#$%&'*.^`|~+-
 // (see: https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1)
 const validCookieNameRegEx = /^[\w!#$%&'*.^`|~+-]+$/
@@ -23,9 +23,7 @@ const base64ToBytes = (base64: string): Uint8Array => {
   return out
 }
 
-const signConfig = {
-  algorithm: { name: 'HMAC', hash: 'SHA-256' },
-}
+const algorithm = { name: 'HMAC', hash: 'SHA-256' }
 
 export const parseCookie = (cookie: string, name?: string): Cookie => {
   if (name && cookie.indexOf(name) === -1) {
@@ -82,12 +80,12 @@ export const parseSignedCookie = async (cookie: string, secret: Secret, name?: s
 const getCryptoKey = async (secret: string | BufferSource): Promise<CryptoKey> => {
   if (!secret) throw new Error('secret is required to sign/verify cookies')
   const secretBuf = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret
-  return await crypto.subtle.importKey('raw', secretBuf, signConfig.algorithm, false, ['sign', 'verify'])
+  return await crypto.subtle.importKey('raw', secretBuf, algorithm, false, ['sign', 'verify'])
 }
 
 const makeSignature = async (value: string, secret: string | BufferSource): Promise<string> => {
   const key = await getCryptoKey(secret)
-  const signature = await crypto.subtle.sign(signConfig.algorithm.name, key, new TextEncoder().encode(value))
+  const signature = await crypto.subtle.sign(algorithm.name, key, new TextEncoder().encode(value))
   // the returned base64 encoded signature will always be 44 characters long and end with one or two equal signs
   return bytesToBase64(signature as ArrayBuffer)
 }
@@ -100,7 +98,7 @@ const verifySignature = async (
   try {
     const signatureBytes = base64ToBytes(base64Signature)
     return await crypto.subtle.verify(
-      signConfig.algorithm,
+      algorithm,
       secret,
       signatureBytes.buffer as ArrayBuffer,
       new TextEncoder().encode(value)

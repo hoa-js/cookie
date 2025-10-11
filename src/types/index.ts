@@ -31,7 +31,6 @@ export type Secret = string | BufferSource
 
 export type CookieAdapterOptions = {
   secret?: Secret
-  signed?: boolean
   defaultOptions?: CookieOptions
 }
 

@@ -1,5 +1,5 @@
-import { parseCookie, parseSignedCookie, serialize, serializeSigned, generateSignedCookie, generateCookie, tryDecode } from '../src/cookie.js'
-import type { Cookie, SignedCookie } from '../src/types/index.js'
+import { parseCookie, parseSignedCookie, serialize, serializeSigned, generateSignedCookie, generateCookie, tryDecode } from '../src/cookie.ts'
+import type { Cookie, SignedCookie } from '../src/types/index.ts'
 
 describe('Parse cookie', () => {
   it('Should parse cookies', () => {

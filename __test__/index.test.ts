@@ -1,7 +1,7 @@
 import { Hoa } from 'hoa'
 import type { HoaContext, NextFunction } from 'hoa'
-import { cookie } from '../src/index.js'
-import { parseCookie, serializeSigned } from '../src/cookie.js'
+import { cookie } from '../src/index.ts'
+import { parseCookie, serializeSigned } from '../src/cookie.ts'
 import { describe, it, expect, beforeEach } from '@jest/globals'
 
 describe('Adapter behavior edge cases', () => {
