@@ -1,28 +1,22 @@
-export default {
-  // Test environment
-  testEnvironment: 'node',
+import type { Config } from 'jest'
+import { createDefaultPreset } from 'ts-jest'
 
-  // Test file patterns
-  testMatch: [
-    '**/__test__/**/*.js'
-  ],
-
+const config: Config = {
   // Coverage settings
   collectCoverage: true,
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   collectCoverageFrom: [
-    'src/**/*.js',
-    '!src/**/*.test.js'
+    'src/**/*.ts',
+    '!src/**/*.d.ts',
+    '!src/**/*.test.ts'
   ],
-
+  preset: 'ts-jest/presets/default-esm',
+  extensionsToTreatAsEsm: ['.ts'],
   // Module resolution - correct property name
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1'
   },
-
-  // Transform settings for ESM - disable transforms for pure ESM
-  transform: {},
 
   // Verbose output
   verbose: true,
@@ -32,11 +26,10 @@ export default {
 
   // Error handling
   errorOnDeprecated: true,
-
-  // ESM support
-  globals: {
-    jest: {
-      useESM: true
-    }
-  }
+  testMatch: [
+    '**/__test__/**/*.ts'
+  ],
+  ...createDefaultPreset({ useESM: true }),
 }
+
+export default config

@@ -2,16 +2,16 @@
   "name": "@hoajs/cookie",
   "version": "0.1.0",
   "description": "cookie middleware for Hoa.",
-  "main": "./dist/cjs/cookie.js",
+  "main": "./dist/cjs/index.js",
   "type": "module",
-  "module": "./dist/esm/cookie.js",
-  "types": "./types/index.d.ts",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
   "exports": {
     ".": {
-      "types": "./types/index.d.ts",
-      "import": "./dist/esm/cookie.js",
-      "require": "./dist/cjs/cookie.js",
-      "default": "./dist/esm/cookie.js"
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js",
+      "default": "./dist/esm/index.js"
     }
   },
   "files": [
@@ -40,27 +40,21 @@
   "devDependencies": {
     "@commitlint/cli": "20.0.0",
     "@commitlint/config-conventional": "20.0.0",
-    "@eslint/js": "^9.37.0",
+    "@jest/globals": "^30.2.0",
     "eslint": "9.36.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.4",
-    "globals": "16.4.0",
-    "hoa": "0.1.0",
     "husky": "9.1.7",
     "jest": "30.1.3",
     "neostandard": "0.12.2",
-    "prettier": "^3.6.2",
+    "ts-jest": "^29.4.4",
     "tsup": "8.5.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.0"
+    "@hoajs/router": "0.1.0",
+    "hoa": "0.1.0"
   },
   "peerDependencies": {
-    "hoa": "*"
+    "hoa": "*",
+    "@hoajs/router": "*"
   },
   "engines": {
     "node": ">=20"
-  },
-  "dependencies": {
-    "path-to-regexp": "8.3.0"
   }
 }

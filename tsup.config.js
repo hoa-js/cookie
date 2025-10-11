@@ -3,9 +3,9 @@ import { defineConfig } from 'tsup'
 export default defineConfig([
   // ESM build
   {
-    entry: ['src/**/*.js'],
+    entry: 'src/index.ts',
     format: 'esm',
-    dts: false,
+    dts: true,
     splitting: false,
     sourcemap: false,
     clean: true,
@@ -20,7 +20,7 @@ export default defineConfig([
   },
   // CJS build
   {
-    entry: ['src/**/*.js'],
+    entry: ['src/index.ts'],
     format: 'cjs',
     dts: false,
     splitting: false,

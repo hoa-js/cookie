@@ -3,16 +3,14 @@
     "moduleResolution": "nodenext",
     "module": "nodenext",
     "target": "ES2022",
-    "baseUrl": "./",
-    "paths": {
-      "hoa": ["../hoa/types/index.d.ts"]
-    },
+    "baseUrl": "./src",
     "allowImportingTsExtensions": true,
     "skipLibCheck": true,
-    "allowJs": true,
     "noEmit": true,
-    "esModuleInterop": true
+    "declaration": false,
+    "esModuleInterop": true,
+    "isolatedModules": true
   },
-  "include": ["src/**/*.ts", "src/**/*.js"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

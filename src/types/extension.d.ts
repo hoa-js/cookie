@@ -1,6 +1,6 @@
-import { GetCookie, SetCookie, DeleteCookie, GetSignedCookie, SetSignedCookie, } from '../src/index'
+import { GetCookie, SetCookie, DeleteCookie, GetSignedCookie, SetSignedCookie, } from './index'
 
-declare module hoa {
+declare module 'hoa' {
   interface HoaRequest {
     getCookie: GetCookie
     getSignedCookie: GetSignedCookie

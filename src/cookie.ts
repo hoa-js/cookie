@@ -1,139 +1,87 @@
-export type Cookie = Record<string, string>;
-export type SignedCookie = Record<string, string | false>;
-
-type PartitionedCookieConstraint =
-  | { partitioned: true; secure: true }
-  | { partitioned?: boolean; secure?: boolean };
-type SecureCookieConstraint = { secure: true };
-type HostCookieConstraint = { secure: true; path: "/"; domain?: undefined };
-export type CookiePrefixOptions = "host" | "secure";
-export type CookieAdapterOptions = {
-  secret?: string | BufferSource;
-  signed?: boolean;
-  algorithm?: { name: string; hash: string };
-  defaultOptions?: CookieOptions;
-};
-export type CookieOptions = {
-  domain?: string;
-  expires?: Date;
-  httpOnly?: boolean;
-  maxAge?: number;
-  path?: string;
-  secure?: boolean;
-  sameSite?: "Strict" | "Lax" | "None" | "strict" | "lax" | "none";
-  partitioned?: boolean;
-  priority?: "Low" | "Medium" | "High" | "low" | "medium" | "high";
-  prefix?: CookiePrefixOptions;
-} & PartitionedCookieConstraint;
-
-export type CookieConstraint<Name> = Name extends `__Secure-${string}`
-  ? CookieOptions & SecureCookieConstraint
-  : Name extends `__Host-${string}`
-  ? CookieOptions & HostCookieConstraint
-  : CookieOptions;
-
+import { Decoder, Cookie, SignedCookie, CookieAdapterOptions, CookieOptions, CookieConstraint } from './types/index.ts'
 // all alphanumeric chars and all of _!#$%&'*.^`|~+-
 // (see: https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1)
-const validCookieNameRegEx = /^[\w!#$%&'*.^`|~+-]+$/;
+const validCookieNameRegEx = /^[\w!#$%&'*.^`|~+-]+$/
 
 // all ASCII chars 32-126 except 34, 59, and 92 (i.e. space to tilde but not double quote, semicolon, or backslash)
 // (see: https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1)
 //
 // note: the spec also prohibits comma and space, but we allow both since they are very common in the real world
 // (see: https://github.com/golang/go/issues/7243)
-const validCookieValueRegEx = /^[ !#-:<-[\]-~]*$/;
+const validCookieValueRegEx = /^[ !#-:<-[\]-~]*$/
 
-const algorithm = { name: "HMAC", hash: "SHA-256" };
-export const setSignAlgorithm = (alg: typeof algorithm) => {
-  Object.assign(algorithm, alg);
-  if (!algorithm?.name || !algorithm?.hash) {
-    throw new Error("algorithm config is invalidate");
-  }
-};
+const signConfig = {
+  algorithm: { name: 'HMAC', hash: 'SHA-256' },
+  secret: null
+}
+export const setSignConfig = (secret: CookieAdapterOptions['secret']) => {
+  signConfig.secret = secret
+}
 
 export const parse = (cookie: string, name?: string): Cookie => {
   if (name && cookie.indexOf(name) === -1) {
-    return {};
+    return {}
   }
-  const pairs = cookie.trim().split(";");
-  const parsedCookie: Cookie = {};
+  const pairs = cookie.trim().split(';')
+  const parsedCookie: Cookie = {}
   for (let pairStr of pairs) {
-    pairStr = pairStr.trim();
-    const valueStartPosition = pairStr.indexOf("=");
+    pairStr = pairStr.trim()
+    const valueStartPosition = pairStr.indexOf('=')
     if (valueStartPosition === -1) {
-      continue;
+      continue
     }
-    const cookieName = pairStr.substring(0, valueStartPosition).trim();
-    if (
-      (name && name !== cookieName) ||
-      !validCookieNameRegEx.test(cookieName)
-    ) {
-      continue;
+
+    const cookieName = pairStr.substring(0, valueStartPosition).trim()
+    if ((name && name !== cookieName) || !validCookieNameRegEx.test(cookieName)) {
+      continue
     }
-    let cookieValue = pairStr.substring(valueStartPosition + 1).trim();
+
+    let cookieValue = pairStr.substring(valueStartPosition + 1).trim()
     if (cookieValue.startsWith('"') && cookieValue.endsWith('"')) {
-      cookieValue = cookieValue.slice(1, -1);
+      cookieValue = cookieValue.slice(1, -1)
     }
     if (validCookieValueRegEx.test(cookieValue)) {
       parsedCookie[cookieName] =
-        cookieValue.indexOf("%") !== -1
-          ? tryDecode(cookieValue, decodeURIComponent)
-          : cookieValue;
+        cookieValue.indexOf('%') !== -1 ? tryDecode(cookieValue, decodeURIComponent) : cookieValue
       if (name) {
-        break;
+        break
       }
     }
   }
-  return parsedCookie;
-};
+  return parsedCookie
+}
 
-export const parseSigned = async (
-  cookie: string,
-  secret: CookieAdapterOptions["secret"],
-  name?: string
-) => {
-  const parsedCookie: SignedCookie = {};
-  const secretKey = await getCryptoKey(secret);
+export const parseSigned = async (cookie: string, secret: CookieAdapterOptions['secret'], name?: string) => {
+  const parsedCookie: SignedCookie = {}
+  const secretKey = await getCryptoKey(secret)
   for (const [key, value] of Object.entries(parse(cookie, name))) {
-    const signatureStartPos = value.lastIndexOf(".");
+    const signatureStartPos = value.lastIndexOf('.')
     if (signatureStartPos < 1) {
-      continue;
+      continue
     }
-    const signedValue = value.substring(0, signatureStartPos);
-    const signature = value.substring(signatureStartPos + 1);
-    if (signature.length !== 44 || !signature.endsWith("=")) {
-      continue;
+    const signedValue = value.substring(0, signatureStartPos)
+    const signature = value.substring(signatureStartPos + 1)
+    if (signature.length !== 44 || !signature.endsWith('=')) {
+      continue
     }
-    const isVerified = await verifySignature(signature, signedValue, secretKey);
-    parsedCookie[key] = isVerified ? signedValue : false;
+    const isVerified = await verifySignature(signature, signedValue, secretKey)
+    parsedCookie[key] = isVerified ? signedValue : false
   }
-  return parseSigned;
-};
+  return parsedCookie
+}
 
-const getCryptoKey = async (
-  secret: string | BufferSource
-): Promise<CryptoKey> => {
-  const secretBuf =
-    typeof secret === "string" ? new TextEncoder().encode(secret) : secret;
-  return await crypto.subtle.importKey("raw", secretBuf, algorithm, false, [
-    "sign",
-    "verify",
-  ]);
-};
+const getCryptoKey = async (secret: string | BufferSource): Promise<CryptoKey> => {
+  if (!secret) throw new Error('secret is required to sign/verify cookies')
+  const secretBuf = typeof secret === 'string' ? new TextEncoder().encode(secret) : secret
+  return await crypto.subtle.importKey('raw', secretBuf, signConfig.algorithm, false, ['sign', 'verify'])
+}
 
-const makeSignature = async (
-  value: string,
-  secret: string | BufferSource
-): Promise<string> => {
-  const key = await getCryptoKey(secret);
-  const signature = await crypto.subtle.sign(
-    algorithm.name,
-    key,
-    new TextEncoder().encode(value)
-  );
+const makeSignature = async (value: string, secret: string | BufferSource): Promise<string> => {
+  const key = await getCryptoKey(secret)
+  const signature = await crypto.subtle.sign(signConfig.algorithm.name, key, new TextEncoder().encode(value))
   // the returned base64 encoded signature will always be 44 characters long and end with one or two equal signs
-  return btoa(String.fromCharCode(...new Uint8Array(signature)));
-};
+  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+}
 
 const verifySignature = async (
   base64Signature: string,
@@ -141,157 +89,125 @@ const verifySignature = async (
   secret: CryptoKey
 ): Promise<boolean> => {
   try {
-    const signatureBinStr = atob(base64Signature);
-    const signature = new Uint8Array(signatureBinStr.length);
+    const signatureBinStr = atob(base64Signature)
+    const signature = new Uint8Array(signatureBinStr.length)
     for (let i = 0, len = signatureBinStr.length; i < len; i++) {
-      signature[i] = signatureBinStr.charCodeAt(i);
+      signature[i] = signatureBinStr.charCodeAt(i)
     }
-    return await crypto.subtle.verify(
-      algorithm,
-      secret,
-      signature,
-      new TextEncoder().encode(value)
-    );
+    return await crypto.subtle.verify(signConfig.algorithm, secret, signature, new TextEncoder().encode(value))
   } catch {
-    return false;
+    return false
   }
-};
+}
 
-type Decoder = (str: string) => string;
 export const tryDecode = (str: string, decoder: Decoder): string => {
   try {
-    return decoder(str);
+    return decoder(str)
   } catch {
     return str.replace(/(?:%[0-9A-Fa-f]{2})+/g, (match) => {
       try {
-        return decoder(match);
+        return decoder(match)
       } catch {
-        return match;
+        return match
       }
-    });
+    })
   }
-};
-export const generateSignedCookie = async (
-  name: string,
-  value: string,
-  secret: CookieAdapterOptions["secret"],
-  opt: CookieOptions
-): Promise<string> => {
-  let cookie: string;
-  if (opt?.prefix === "secure") {
-    cookie = await serializeSigned("__Secure-" + name, value, secret, {
-      path: "/",
-      ...opt,
-      secure: true,
-    });
-  } else if (opt?.prefix === "host") {
-    cookie = await serializeSigned("__Host-" + name, value, secret, {
-      ...opt,
-      path: "/",
-      secure: true,
-      domain: undefined,
-    });
+}
+export const generateSignedCookie = async (name: string, value: string, opt: CookieOptions): Promise<string> => {
+  let cookie: string
+  if (opt?.prefix === 'secure') {
+    cookie = await serializeSigned('__Secure-' + name, value, signConfig.secret, { path: '/', ...opt, secure: true })
+  } else if (opt?.prefix === 'host') {
+    cookie = await serializeSigned('__Host-' + name, value, signConfig.secret, { ...opt, path: '/', secure: true, domain: undefined })
   } else {
-    cookie = await serializeSigned(name, value, secret, { path: "/", ...opt });
+    cookie = await serializeSigned(name, value, signConfig.secret, { path: '/', ...opt })
   }
-  return cookie;
-};
-export const generateCookie = (
-  name: string,
-  value: string,
-  opt?: CookieOptions
-): string => {
+  return cookie
+}
+export const generateCookie = (name: string, value: string, opt?: CookieOptions): string => {
   // Cookie names prefixed with __Secure- can be used only if they are set with the secure attribute.
   // Cookie names prefixed with __Host- can be used only if they are set with the secure attribute, must have a path of / (meaning any path at the host)
   // and must not have a Domain attribute.
   // Read more at https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#cookie_prefixes'
-  let cookie;
-  if (opt?.prefix === "secure") {
-    cookie = serialize("__Secure-" + name, value, {
-      path: "/",
+  let cookie
+  if (opt?.prefix === 'secure') {
+    cookie = serialize('__Secure-' + name, value, { path: '/', ...opt, secure: true })
+  } else if (opt?.prefix === 'host') {
+    cookie = serialize('__Host-' + name, value, {
       ...opt,
-      secure: true,
-    });
-  } else if (opt?.prefix === "host") {
-    cookie = serialize("__Host-" + name, value, {
-      ...opt,
-      path: "/",
+      path: '/',
       secure: true,
       domain: undefined,
-    });
+    })
   } else {
-    cookie = serialize(name, value, { path: "/", ...opt });
+    cookie = serialize(name, value, { path: '/', ...opt })
   }
-  return cookie;
-};
+  return cookie
+}
 
 export const serializeSigned = async (
   name: string,
   value: string,
-  secret: string | BufferSource,
+  secret: CookieAdapterOptions['secret'],
   opt: CookieOptions = {}
 ): Promise<string> => {
-  const signature = await makeSignature(value, secret);
-  value = `${value}.${signature}`;
-  value = encodeURIComponent(value);
-  return _serialize(name, value, opt);
-};
+  const signature = await makeSignature(value, secret)
+  value = `${value}.${signature}`
+  value = encodeURIComponent(value)
+  return _serialize(name, value, opt)
+}
 
 export const serialize = <Name extends string>(
   name: Name,
   value: string,
   opt?: CookieConstraint<Name>
 ): string => {
-  value = encodeURIComponent(value);
-  return _serialize(name, value, opt);
-};
+  value = encodeURIComponent(value)
+  return _serialize(name, value, opt)
+}
 
-const _serialize = (
-  name: string,
-  value: string,
-  opt: CookieOptions = {}
-): string => {
-  let cookie = `${name}=${value}`;
+const _serialize = (name: string, value: string, opt: CookieOptions = {}): string => {
+  let cookie = `${name}=${value}`
 
-  if (name.startsWith("__Secure-") && !opt.secure) {
+  if (name.startsWith('__Secure-') && !opt.secure) {
     // FIXME: replace link to RFC
     // https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis-13#section-4.1.3.1
-    throw new Error("__Secure- Cookie must have Secure attributes");
+    throw new Error('__Secure- Cookie must have Secure attributes')
   }
 
-  if (name.startsWith("__Host-")) {
+  if (name.startsWith('__Host-')) {
     // FIXME: replace link to RFC
     // https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis-13#section-4.1.3.2
     if (!opt.secure) {
-      throw new Error("__Host- Cookie must have Secure attributes");
+      throw new Error('__Host- Cookie must have Secure attributes')
     }
 
-    if (opt.path !== "/") {
-      throw new Error('__Host- Cookie must have Path attributes with "/"');
+    if (opt.path !== '/') {
+      throw new Error('__Host- Cookie must have Path attributes with "/"')
     }
 
     if (opt.domain) {
-      throw new Error("__Host- Cookie must not have Domain attributes");
+      throw new Error('__Host- Cookie must not have Domain attributes')
     }
   }
 
-  if (opt && typeof opt.maxAge === "number" && opt.maxAge >= 0) {
+  if (opt && typeof opt.maxAge === 'number' && opt.maxAge >= 0) {
     if (opt.maxAge > 34560000) {
       // FIXME: replace link to RFC
       // https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis-13#section-4.1.2.2
       throw new Error(
-        "Cookies Max-Age SHOULD NOT be greater than 400 days (34560000 seconds) in duration."
-      );
+        'Cookies Max-Age SHOULD NOT be greater than 400 days (34560000 seconds) in duration.'
+      )
     }
-    cookie += `; Max-Age=${opt.maxAge | 0}`;
+    cookie += `; Max-Age=${opt.maxAge | 0}`
   }
 
-  if (opt.domain && opt.prefix !== "host") {
-    cookie += `; Domain=${opt.domain}`;
+  if (opt.domain && opt.prefix !== 'host') {
+    cookie += `; Domain=${opt.domain}`
   }
 
   if (opt.path) {
-    cookie += `; Path=${opt.path}`;
+    cookie += `; Path=${opt.path}`
   }
 
   if (opt.expires) {
@@ -299,40 +215,36 @@ const _serialize = (
       // FIXME: replace link to RFC
       // https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis-13#section-4.1.2.1
       throw new Error(
-        "Cookies Expires SHOULD NOT be greater than 400 days (34560000 seconds) in the future."
-      );
+        'Cookies Expires SHOULD NOT be greater than 400 days (34560000 seconds) in the future.'
+      )
     }
-    cookie += `; Expires=${opt.expires.toUTCString()}`;
+    cookie += `; Expires=${opt.expires.toUTCString()}`
   }
 
   if (opt.httpOnly) {
-    cookie += "; HttpOnly";
+    cookie += '; HttpOnly'
   }
 
   if (opt.secure) {
-    cookie += "; Secure";
+    cookie += '; Secure'
   }
 
   if (opt.sameSite) {
-    cookie += `; SameSite=${
-      opt.sameSite.charAt(0).toUpperCase() + opt.sameSite.slice(1)
-    }`;
+    cookie += `; SameSite=${opt.sameSite.charAt(0).toUpperCase() + opt.sameSite.slice(1)}`
   }
 
   if (opt.priority) {
-    cookie += `; Priority=${
-      opt.priority.charAt(0).toUpperCase() + opt.priority.slice(1)
-    }`;
+    cookie += `; Priority=${opt.priority.charAt(0).toUpperCase() + opt.priority.slice(1)}`
   }
 
   if (opt.partitioned) {
     // FIXME: replace link to RFC
     // https://www.ietf.org/archive/id/draft-cutler-httpbis-partitioned-cookies-01.html#section-2.3
     if (!opt.secure) {
-      throw new Error("Partitioned Cookie must have Secure attributes");
+      throw new Error('Partitioned Cookie must have Secure attributes')
     }
-    cookie += "; Partitioned";
+    cookie += '; Partitioned'
   }
 
-  return cookie;
-};
+  return cookie
+}
