@@ -113,14 +113,14 @@ export const tryDecode = (str: string, decoder: Decoder): string => {
     })
   }
 }
-export const generateSignedCookie = async (name: string, value: string, opt: CookieOptions): Promise<string> => {
+export const generateSignedCookie = async (name: string, value: string, secret: CookieAdapterOptions['secret'], opt: CookieOptions): Promise<string> => {
   let cookie: string
   if (opt?.prefix === 'secure') {
-    cookie = await serializeSigned('__Secure-' + name, value, signConfig.secret, { path: '/', ...opt, secure: true })
+    cookie = await serializeSigned('__Secure-' + name, value, secret, { path: '/', ...opt, secure: true })
   } else if (opt?.prefix === 'host') {
-    cookie = await serializeSigned('__Host-' + name, value, signConfig.secret, { ...opt, path: '/', secure: true, domain: undefined })
+    cookie = await serializeSigned('__Host-' + name, value, secret, { ...opt, path: '/', secure: true, domain: undefined })
   } else {
-    cookie = await serializeSigned(name, value, signConfig.secret, { path: '/', ...opt })
+    cookie = await serializeSigned(name, value, secret, { path: '/', ...opt })
   }
   return cookie
 }

@@ -62,7 +62,7 @@ export function cookie (options: CookieAdapterOptions = DEFAULT_ADAPTER_OPTIONS)
         return parse(cookie)
       }) as GetCookie
       const setSignedCookie: SetSignedCookie = async (name: string, value: string, opt?: CookieOptions) => {
-        const cookie = await generateSignedCookie(name, value, opt)
+        const cookie = await generateSignedCookie(name, value, options.secret, opt)
         ctx.res.append('Set-Cookie', cookie)
       }
       const getSignedCookie = (async (name?: string, prefixOptions?: CookiePrefixOptions) => {
