@@ -1,15 +1,10 @@
-import Hoa from 'hoa'
-import type { HoaContext, NextFunction } from 'hoa'
-import { router } from '@hoajs/router'
-import { cookie } from '../src/index'
-import { describe, it, expect, beforeEach } from '@jest/globals'
-import { parse, parseSigned, serialize, serializeSigned, } from '../src/cookie'
-import type { Cookie, SignedCookie } from '../src/types/index'
+import { parseCookie, parseSignedCookie, serialize, serializeSigned, generateSignedCookie, generateCookie, tryDecode } from '../src/cookie.js'
+import type { Cookie, SignedCookie } from '../src/types/index.js'
 
 describe('Parse cookie', () => {
   it('Should parse cookies', () => {
     const cookieString = 'hoa_cookie=apple; user_name = hoa'
-    const cookie: Cookie = parse(cookieString)
+    const cookie: Cookie = parseCookie(cookieString)
     expect(cookie['hoa_cookie']).toBe('apple')
     expect(cookie['user_name']).toBe('hoa')
   })
@@ -17,7 +12,7 @@ describe('Parse cookie', () => {
   it('Should parse quoted cookie values', () => {
     const cookieString =
       'hoa_cookie="apple"; user_name = " strawberry " ; best_cookie="%20sugar%20";'
-    const cookie: Cookie = parse(cookieString)
+    const cookie: Cookie = parseCookie(cookieString)
     expect(cookie['hoa_cookie']).toBe('apple')
     expect(cookie['user_name']).toBe(' strawberry ')
     expect(cookie['best_cookie']).toBe(' sugar ')
@@ -25,32 +20,32 @@ describe('Parse cookie', () => {
 
   it('Should not throw a URIError when parsing an invalid string', () => {
     const cookieString = 'hoa_cookie="apple%2";'
-    const cookie: Cookie = parse(cookieString)
+    const cookie: Cookie = parseCookie(cookieString)
     expect(cookie['hoa_cookie']).toBe('apple%2')
   })
 
   it('Should parse empty cookies', () => {
-    const cookie: Cookie = parse('')
+    const cookie: Cookie = parseCookie('')
     expect(Object.keys(cookie).length).toBe(0)
   })
 
   it('Should parse one cookie specified by name', () => {
     const cookieString = 'hoa_cookie=apple; user_name = hoa '
-    const cookie: Cookie = parse(cookieString, 'hoa_cookie')
+    const cookie: Cookie = parseCookie(cookieString, 'hoa_cookie')
     expect(cookie['hoa_cookie']).toBe('apple')
     expect(cookie['user_name']).toBeUndefined()
   })
 
   it('Should parse one cookie specified by name even if it is not found', () => {
     const cookieString = 'hoa_cookie=apple; user_name = hoa '
-    const cookie: Cookie = parse(cookieString, 'no_such_cookie')
+    const cookie: Cookie = parseCookie(cookieString, 'no_such_cookie')
     expect(cookie['hoa_cookie']).toBeUndefined()
     expect(cookie['user_name']).toBeUndefined()
   })
 
   it('Should parse cookies with no value', () => {
     const cookieString = 'hoa_cookie=apple; user_name = hoa ;last_path=;'
-    const cookie: Cookie = parse(cookieString)
+    const cookie: Cookie = parseCookie(cookieString)
     expect(cookie['hoa_cookie']).toBe('apple')
     expect(cookie['user_name']).toBe('hoa')
     expect(cookie['last_path']).toBe('')
@@ -58,7 +53,7 @@ describe('Parse cookie', () => {
 
   it('Should parse cookies but not process signed cookies', () => {
     const cookieString = 'hoa_cookie=apple; user_name = hoa ;signed_last_path=z33WMw.%2BHQZYtat78aYvt5%2B6gmjdy7KPSigOJGhoR%2BtyvNoeyw%3D;'
-    const cookie: Cookie = parse(cookieString)
+    const cookie: Cookie = parseCookie(cookieString)
     expect(cookie['hoa_cookie']).toBe('apple')
     expect(cookie['user_name']).toBe('hoa')
     expect(cookie['signed_last_path']).toBe('z33WMw.+HQZYtat78aYvt5+6gmjdy7KPSigOJGhoR+tyvNoeyw=')
@@ -66,7 +61,7 @@ describe('Parse cookie', () => {
 
   it('Should ignore invalid cookie names', () => {
     const cookieString = 'hoa cookie=apple;hoa_m=banana; user_name\\ = hoa ;=AS9+01;'
-    const cookie: Cookie = parse(cookieString)
+    const cookie: Cookie = parseCookie(cookieString)
     expect(cookie['hoa cookie']).toBeUndefined()
     expect(cookie['hoa_m']).toBe('banana')
     expect(cookie['user_name\\']).toBeUndefined()
@@ -75,7 +70,7 @@ describe('Parse cookie', () => {
 
   it('Should ignore invalid cookie values', () => {
     const cookieString = 'hoa_cookie=apple\\npen;hoa_m=banana;'
-    const cookie: Cookie = parse(cookieString)
+    const cookie: Cookie = parseCookie(cookieString)
     expect(cookie['hoa_cookie']).toBeUndefined()
     expect(cookie['hoa_m']).toBe('banana')
   })
@@ -83,7 +78,7 @@ describe('Parse cookie', () => {
   it('Should parse signed cookies and ignore unsigned cookie', async () => {
     const cookieString = 'hoa_cookie=apple; user_name = hoa ;signed_last_path=z33WMw.%2BHQZYtat78aYvt5%2B6gmjdy7KPSigOJGhoR%2BtyvNoeyw%3D;'
     const secret = '123456'
-    const cookie: SignedCookie = await parseSigned(cookieString, secret)
+    const cookie: SignedCookie = await parseSignedCookie(cookieString, secret)
     expect(cookie['signed_last_path']).toBe('z33WMw')
     expect(cookie['hoa_cookie']).toBeUndefined()
     expect(cookie['user_name']).toBeUndefined()
@@ -92,7 +87,7 @@ describe('Parse cookie', () => {
   it('Should parse signed cookies with binary secret and ignore unsigned cookie', async () => {
     const secret = new TextEncoder().encode('123456')
     const cookieString = 'hoa_cookie=apple; user_name = hoa ;signed_last_path=z33WMw.%2BHQZYtat78aYvt5%2B6gmjdy7KPSigOJGhoR%2BtyvNoeyw%3D;'
-    const cookie: SignedCookie = await parseSigned(cookieString, secret)
+    const cookie: SignedCookie = await parseSignedCookie(cookieString, secret)
     expect(cookie['signed_last_path']).toBe('z33WMw')
     expect(cookie['hoa_cookie']).toBeUndefined()
     expect(cookie['user_name']).toBeUndefined()
@@ -101,14 +96,14 @@ describe('Parse cookie', () => {
   it('Should parse signed cookies containing the signature separator', async () => {
     const secret = new TextEncoder().encode('123456')
     const cookieString = 'sign_last_path_dot=z33WMw.demo.PMsCGD5H8eqSD9NPII8WRtIcUrfdE9nt%2FsNpPYaIStU%3D;'
-    const cookie: SignedCookie = await parseSigned(cookieString, secret)
+    const cookie: SignedCookie = await parseSignedCookie(cookieString, secret)
     expect(cookie['sign_last_path_dot']).toBe('z33WMw.demo')
   })
 
   it('Should parse signed cookies and return "false" for wrong signature', async () => {
     const secret = new TextEncoder().encode('123456')
     const cookieString = 'sign_last_path_dot=z33WMw.demo.PMsCGD5H8eqSD9NPII8WRtIcUrfdE9nt%2FsNpPYaIStU%3D;signed_last_path=z33WMw.%2BQZYtat78aYvt5%2B6gmjdy7KPSigOJGhoR%2BtyvNoeyw%3D;'
-    const cookie: SignedCookie = await parseSigned(cookieString, secret)
+    const cookie: SignedCookie = await parseSignedCookie(cookieString, secret)
     expect(cookie['sign_last_path_dot']).toBe('z33WMw.demo')
     expect(cookie['signed_last_path']).toBeFalsy()
   })
@@ -117,7 +112,7 @@ describe('Parse cookie', () => {
     const secret = '123456'
     const cookieString =
       'hoa_cookie=apple;sign_last_path_dot=z33WMw.demo.PMsCGD5H8eqSD9NPII8WRtIcUrfdE9nt%2FsNpPYaIStU%3D;'
-    const cookie: SignedCookie = await parseSigned(cookieString, secret, 'sign_last_path_dot')
+    const cookie: SignedCookie = await parseSignedCookie(cookieString, secret, 'sign_last_path_dot')
     expect(cookie['hoa_cookie']).toBeUndefined()
     expect(cookie['sign_last_path_dot']).toBe('z33WMw.demo')
   })
@@ -238,67 +233,136 @@ describe('Set cookie', () => {
   })
 })
 
-describe('Cookie adapter mounting test', () => {
-  let app: Hoa
-
-  beforeEach(() => {
-    app = new Hoa()
-    app.extend(cookie({
-      secret: '123456',
-      signed: true
-    }))
-    app.extend(router())
+describe('Cookie constraints and errors', () => {
+  it('Should throw on __Secure- cookie without Secure attribute', () => {
+    expect(() => serialize('__Secure-a', 'v', { path: '/' } as any)).toThrow('__Secure- Cookie must have Secure attributes')
   })
 
-  it('Should has cookie methods', async () => {
-    let methodsChecked = false
-    app.get('/hoa', async (ctx: HoaContext, next: NextFunction) => {
-      expect(ctx.req).toHaveProperty('getCookie')
-      expect(ctx.req).toHaveProperty('getSignedCookie')
-      expect(typeof ctx.req.getCookie).toBe('function')
-      expect(typeof ctx.req.getSignedCookie).toBe('function')
-
-      expect(ctx.res).toHaveProperty('setCookie')
-      expect(ctx.res).toHaveProperty('setSignedCookie')
-      expect(ctx.res).toHaveProperty('deleteCookie')
-      expect(typeof ctx.res.setCookie).toBe('function')
-      expect(typeof ctx.res.setSignedCookie).toBe('function')
-      expect(typeof ctx.res.deleteCookie).toBe('function')
-      methodsChecked = true
-      await next()
-    })
-    await req(app, 'get', '/hoa')
-    expect(methodsChecked).toBe(true)
+  it('Should throw on __Host- cookie without Secure attribute', () => {
+    expect(() => serialize('__Host-a', 'v', { path: '/' } as any)).toThrow('__Host- Cookie must have Secure attributes')
   })
 
-  it('Should set cookie on response', async () => {
-    app.get('/set-cookie', async (ctx: HoaContext, next: NextFunction) => {
-      ctx.res.body = 'hoa'
-      ctx.res.status = 200
-      expect(ctx.req.getCookie('hoa-cookie')).toBe('hoa')
-      const c = await ctx.req.getSignedCookie('signed_last_path')
-      expect(c).toBe('z33WMw')
-      ctx.res.setCookie('hoa-cookie', 'hoa')
-      await ctx.res.setSignedCookie('signed_last_path', 'z33WMw')
-      await next()
-    })
-    const req = new Request('http://localhost' + '/set-cookie', { method: 'GET' })
-    req.headers.set('Cookie', 'hoa-cookie=hoa;signed_last_path=z33WMw.%2BHQZYtat78aYvt5%2B6gmjdy7KPSigOJGhoR%2BtyvNoeyw%3D')
-    const response = await app.fetch(req)
-    expect(response.status).toBe(200)
-    const cookies = response.headers.getSetCookie()
-    cookies.forEach((c: string) => {
-      if (c.includes('hoa-cookie')) {
-        const parsedCookie = parse(c, 'hoa-cookie')
-        expect(parsedCookie).toEqual({ 'hoa-cookie': 'hoa' })
-      } else if (c.includes('signed_last_path')) {
-        const parsedCookie = parse(c, 'signed_last_path')
-        expect(parsedCookie).toEqual({ signed_last_path: 'z33WMw.+HQZYtat78aYvt5+6gmjdy7KPSigOJGhoR+tyvNoeyw=' })
-      }
-    })
+  it('Should throw on __Host- cookie with non-root path', () => {
+    expect(() => serialize('__Host-a', 'v', { path: '/abc', secure: true } as any)).toThrow('__Host- Cookie must have Path attributes with "/"')
+  })
+
+  it('Should throw on __Host- cookie with Domain attribute', () => {
+    expect(() => serialize('__Host-a', 'v', { path: '/', secure: true, domain: 'example.com' } as any)).toThrow('__Host- Cookie must not have Domain attributes')
+  })
+
+  it('Should throw on Expires beyond 400 days into the future', () => {
+    const farFuture = new Date(Date.now() + 34560000_000 + 60_000)
+    expect(() => serialize('a', 'v', { expires: farFuture })).toThrow('Cookies Expires SHOULD NOT be greater than 400 days (34560000 seconds) in the future.')
+  })
+
+  it('Should normalize lowercase SameSite values', () => {
+    expect(serialize('a', 'v', { sameSite: 'strict' })).toContain('SameSite=Strict')
+    expect(serialize('b', 'v', { sameSite: 'lax' })).toContain('SameSite=Lax')
+    expect(serialize('c', 'v', { sameSite: 'none' })).toContain('SameSite=None')
   })
 })
-async function req (app: Hoa, method: string, path: string) {
-  const r = new Request('http://localhost' + path, { method: method.toUpperCase() })
-  return app.fetch(r)
-}
+
+describe('Signed cookie format edge cases', () => {
+  it('Should skip signed cookie with invalid signature format (not 44 chars or not ending with "=")', async () => {
+    const secret = '123456'
+    const cookieString = 's=z33WMw.bad;'
+    const cookie = await parseSignedCookie(cookieString, secret)
+    expect(cookie['s']).toBeUndefined()
+  })
+
+  it('Should set value to false when signature base64 is invalid (verifySignature catch path)', async () => {
+    const secret = '123456'
+    const invalidSig = '###########################################='
+    const cookieString = `s=z33WMw.${invalidSig};`
+    const cookie = await parseSignedCookie(cookieString, secret)
+    expect(cookie['s']).toBe(false)
+  })
+
+  it('Should reject parseSignedCookie when secret is undefined', async () => {
+    const cookieString = 's=z33WMw.###########################################='
+    await expect(parseSignedCookie(cookieString, undefined as any)).rejects.toThrow('secret is required to sign/verify cookies')
+  })
+
+  it('Should reject serializeSigned when secret is undefined', async () => {
+    await expect(serializeSigned('a', 'v', undefined as any)).rejects.toThrow('secret is required to sign/verify cookies')
+  })
+})
+
+describe('generateSignedCookie prefixes', () => {
+  it('Should generate signed cookie with __Secure- prefix and enforce Secure and Path=/', async () => {
+    const secret = '123456'
+    const c = await generateSignedCookie('n', 'val', secret, { prefix: 'secure' })
+    expect(c).toContain('__Secure-n=')
+    expect(c).toContain('Path=/')
+    expect(c).toContain('Secure')
+  })
+
+  it('Should generate signed cookie with __Host- prefix enforcing Path=/, Secure and no Domain', async () => {
+    const secret = '123456'
+    const c = await generateSignedCookie('n', 'val', secret, { prefix: 'host', domain: 'example.com' })
+    expect(c).toContain('__Host-n=')
+    expect(c).toContain('Path=/')
+    expect(c).toContain('Secure')
+    expect(c).not.toContain('Domain=')
+  })
+})
+
+describe('Additional cookie.ts edge cases for coverage', () => {
+  it('Should decode valid percent sequences while preserving invalid ones via tryDecode fallback', () => {
+    const cookieString = 'mix="bad%2 good%20X%ZZ";'
+    const cookie: Cookie = parseCookie(cookieString, 'mix')
+    expect(cookie['mix']).toBe('bad%2 good X%ZZ')
+  })
+
+  it('Should floor fractional maxAge values', () => {
+    const serialized = serialize('age', 'v', { maxAge: 1.9 })
+    expect(serialized).toBe('age=v; Max-Age=1')
+  })
+
+  it('tryDecode should fallback to keep invalid percent sequences when decoder throws on chunk', () => {
+    // Build a string with a mix of valid and invalid percent sequences
+    const str = 'A%20B%GGC%ZZD%2E' // %20 and %2E are valid; %GG and %ZZ are invalid-like chunks
+    // decoder that throws for any input containing 'GG' or 'ZZ', succeeds otherwise using decodeURIComponent
+    const decoder = (s: string) => {
+      if (s.includes('GG') || s.includes('ZZ')) throw new Error('bad percent seq')
+      return decodeURIComponent(s)
+    }
+    const out = tryDecode(str, decoder)
+    // Expected behavior:
+    // - Whole-string decode fails, so we enter fallback replace
+    // - For each contiguous percent sequence chunk:
+    //   * valid ones (%20, %2E) are decoded
+    //   * invalid-like ones cause decoder(match) to throw and should be kept as-is
+    // Result should be: 'A B%GGC%ZZD.'
+    expect(out).toBe('A B%GGC%ZZD.')
+  })
+
+  it('tryDecode should keep valid percent sequences when decoder throws on chunk', () => {
+    const str = 'X%20Y%2EZ'
+    // decoder that always throws so inner decoder(match) triggers catch and returns match
+    const decoder = (_s: string) => { throw new Error('fail') }
+    const out = tryDecode(str, decoder)
+    expect(out).toBe('X%20Y%2EZ')
+  })
+
+  it('Should floor fractional maxAge values', () => {
+    const serialized = serialize('age', 'v', { maxAge: 1.9 })
+    expect(serialized).toBe('age=v; Max-Age=1')
+  })
+
+  it('generateCookie should enforce Secure and Path for secure prefix and keep Domain', () => {
+    const serialized = generateCookie('n', 'val', { prefix: 'secure', secure: false, path: '/x', domain: 'example.com' })
+    expect(serialized).toContain('__Secure-n=val')
+    expect(serialized).toContain('Path=/')
+    expect(serialized).toContain('Secure')
+    expect(serialized).toContain('Domain=example.com')
+  })
+
+  it('generateCookie should enforce Path=/ and Secure for host prefix and strip Domain', () => {
+    const serialized = generateCookie('n', 'val', { prefix: 'host', secure: false, path: '/x', domain: 'example.com' })
+    expect(serialized).toContain('__Host-n=val')
+    expect(serialized).toContain('Path=/')
+    expect(serialized).toContain('Secure')
+    expect(serialized).not.toContain('Domain=')
+  })
+})

@@ -1,11 +1,9 @@
-import { HoaContext, Application, NextFunction, HoaMiddleware } from 'hoa'
 import {
-  parse,
-  parseSigned,
+  parseCookie,
+  parseSignedCookie,
   generateSignedCookie,
-  generateCookie,
-  setSignConfig
-} from './cookie.ts'
+  generateCookie
+} from './cookie.js'
 import type {
   Cookie,
   CookiePrefixOptions,
@@ -14,14 +12,8 @@ import type {
   GetCookie,
   SetCookie,
   DeleteCookie,
-  GetSignedCookie,
-  SetSignedCookie,
-} from './types/index.ts'
-
-export {
-  generateSignedCookie,
-  generateCookie,
-}
+  SignedCookie,
+} from './types/index.js'
 
 const DEFAULT_ADAPTER_OPTIONS: CookieAdapterOptions = {
   secret: undefined,
@@ -31,76 +23,72 @@ const DEFAULT_ADAPTER_OPTIONS: CookieAdapterOptions = {
     httpOnly: true,
     secure: false,
     sameSite: 'Lax',
-    maxAge: 7 * 24 * 60 * 60,
+    maxAge: 7 * 24 * 60 * 60
   }
 }
 
 export function cookie (options: CookieAdapterOptions = DEFAULT_ADAPTER_OPTIONS) {
-  if (options.signed && !options.secret) {
+  if ((options.defaultOptions?.signed) && !options.secret) {
     throw new Error('secret is required when signed is true')
   }
-  setSignConfig(options.secret)
-  return function (app: Application) {
-    const cookieMiddleware: HoaMiddleware = async (ctx: HoaContext, next: NextFunction) => {
-      const getCookie = ((
-        name?: string,
-        prefixOptions?: CookiePrefixOptions
-      ): string | undefined | Cookie => {
-        const cookie = ctx.req.get('cookie')
-        if (typeof name === 'string') {
-          if (!cookie) return undefined
-          let finalName = name
-          if (prefixOptions === 'secure') {
-            finalName = '__Secure-' + name
-          } else if (prefixOptions === 'host') {
-            finalName = '__Host-' + name
-          }
-          const obj = parse(cookie, finalName)
-          return obj[finalName]
-        }
-        if (!cookie) return {}
-        return parse(cookie)
-      }) as GetCookie
-      const setSignedCookie: SetSignedCookie = async (name: string, value: string, opt?: CookieOptions) => {
-        const cookie = await generateSignedCookie(name, value, options.secret, opt)
-        ctx.res.append('Set-Cookie', cookie)
+
+  return function cookieExtension (app: any) {
+    const getCookie = async function getCookie (
+      name: string,
+      opts?: { prefix?: CookiePrefixOptions; signed?: boolean }
+    ): Promise<string | undefined | false> {
+      if (!name) return
+
+      const cookieHeader = this.get('cookie')
+      const prefixOpt = opts?.prefix
+      const signed = opts?.signed === true
+
+      const resolveNameWithPrefix = (n: string | undefined) => {
+        if (prefixOpt === 'secure') return '__Secure-' + n
+        if (prefixOpt === 'host') return '__Host-' + n
+        return n
       }
-      const getSignedCookie = (async (name?: string, prefixOptions?: CookiePrefixOptions) => {
-        const cookie = ctx.req.get('cookie')
-        if (typeof name === 'string') {
-          if (!cookie) return undefined
-          let finalName = name
-          if (prefixOptions === 'secure') {
-            finalName = '__Secure-' + name
-          } else if (prefixOptions === 'host') {
-            finalName = '__Host-' + name
-          }
-          const obj = await parseSigned(cookie, options.secret, finalName)
-          return obj[finalName]
-        }
-        if (!cookie) {
-          return {}
-        }
-        return await parseSigned(cookie, options.secret)
-      }) as GetSignedCookie
-      const setCookie: SetCookie = (name: string, value: string, opt: CookieOptions = options.defaultOptions) => {
-        const cookie = generateCookie(name, value, opt)
-        ctx.res.append('Set-Cookie', cookie)
+
+      if (signed) {
+        if (!cookieHeader) return undefined
+        const finalName = resolveNameWithPrefix(name) as string
+        const obj = await parseSignedCookie(cookieHeader, options.secret, finalName)
+        return (obj as SignedCookie)[finalName]
       }
-      const deleteCookie: DeleteCookie = (name: string, opt?: CookieOptions): string | undefined => {
-        const deletedCookie = getCookie(name, opt?.prefix)
-        setCookie(name, '', { ...opt, maxAge: 0 })
-        return deletedCookie
+
+      // unsigned
+      if (!cookieHeader) return undefined
+      const finalName = resolveNameWithPrefix(name) as string
+      const obj = parseCookie(cookieHeader, finalName)
+      return (obj as Cookie)[finalName]
+    } as unknown as GetCookie
+
+    const setCookie = async function setCookie (name: string, value: string, opts?: CookieOptions) {
+      if (!name || (value == null)) return
+
+      const cookieOptions = opts || options.defaultOptions
+      const isSigned = Boolean(cookieOptions?.signed)
+      if (isSigned) {
+        const cookie = await generateSignedCookie(name, value, options.secret, cookieOptions)
+        this.append('Set-Cookie', cookie)
+        return
       }
-      ctx.req['getCookie'] = getCookie
-      ctx.req['getSignedCookie'] = getSignedCookie
-      ctx.res['setCookie'] = setCookie
-      ctx.res['setSignedCookie'] = setSignedCookie
-      ctx.res['deleteCookie'] = deleteCookie
-      return next()
-    }
-    app.use(cookieMiddleware)
-    return app
+      const cookie = generateCookie(name, value, cookieOptions)
+      this.append('Set-Cookie', cookie)
+    } as unknown as SetCookie
+
+    const deleteCookie = async function deleteCookie (name: string) {
+      await this.setCookie(name, '', { maxAge: 0 })
+    } as unknown as DeleteCookie
+
+    // mount on both req and res prototypes
+    app.HoaRequest.prototype.getCookie = getCookie
+    app.HoaRequest.prototype.setCookie = setCookie
+    app.HoaRequest.prototype.deleteCookie = deleteCookie
+
+    app.HoaResponse.prototype.getCookie = getCookie
+    app.HoaResponse.prototype.setCookie = setCookie
+    app.HoaResponse.prototype.deleteCookie = deleteCookie
   }
 }
 

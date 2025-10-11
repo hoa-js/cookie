@@ -1,4 +1,4 @@
-import { Decoder, Cookie, SignedCookie, Secret, CookieOptions, CookieConstraint } from './types/index.ts'
+import { Decoder, Cookie, SignedCookie, Secret, CookieOptions, CookieConstraint } from './types/index.js'
 // all alphanumeric chars and all of _!#$%&'*.^`|~+-
 // (see: https://datatracker.ietf.org/doc/html/rfc6265#section-4.1.1)
 const validCookieNameRegEx = /^[\w!#$%&'*.^`|~+-]+$/
@@ -10,15 +10,24 @@ const validCookieNameRegEx = /^[\w!#$%&'*.^`|~+-]+$/
 // (see: https://github.com/golang/go/issues/7243)
 const validCookieValueRegEx = /^[ !#-:<-[\]-~]*$/
 
-const signConfig = {
-  algorithm: { name: 'HMAC', hash: 'SHA-256' },
-  secret: null
-}
-export const setSignConfig = (secret: Secret) => {
-  signConfig.secret = secret
+const bytesToBase64 = (bytes: ArrayBuffer | Uint8Array): string => {
+  const u8 = new Uint8Array(bytes)
+  return btoa(String.fromCharCode(...u8))
 }
 
-export const parse = (cookie: string, name?: string): Cookie => {
+const base64ToBytes = (base64: string): Uint8Array => {
+  const bin = atob(base64)
+  const len = bin.length
+  const out = new Uint8Array(len)
+  for (let i = 0; i < len; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+const signConfig = {
+  algorithm: { name: 'HMAC', hash: 'SHA-256' },
+}
+
+export const parseCookie = (cookie: string, name?: string): Cookie => {
   if (name && cookie.indexOf(name) === -1) {
     return {}
   }
@@ -42,7 +51,7 @@ export const parse = (cookie: string, name?: string): Cookie => {
     }
     if (validCookieValueRegEx.test(cookieValue)) {
       parsedCookie[cookieName] =
-        cookieValue.indexOf('%') !== -1 ? tryDecode(cookieValue, decodeURIComponent) : cookieValue
+        cookieValue.includes('%') ? tryDecode(cookieValue, decodeURIComponent) : cookieValue
       if (name) {
         break
       }
@@ -51,10 +60,10 @@ export const parse = (cookie: string, name?: string): Cookie => {
   return parsedCookie
 }
 
-export const parseSigned = async (cookie: string, secret: Secret, name?: string) => {
+export const parseSignedCookie = async (cookie: string, secret: Secret, name?: string) => {
   const parsedCookie: SignedCookie = {}
   const secretKey = await getCryptoKey(secret)
-  for (const [key, value] of Object.entries(parse(cookie, name))) {
+  for (const [key, value] of Object.entries(parseCookie(cookie, name))) {
     const signatureStartPos = value.lastIndexOf('.')
     if (signatureStartPos < 1) {
       continue
@@ -80,7 +89,7 @@ const makeSignature = async (value: string, secret: string | BufferSource): Prom
   const key = await getCryptoKey(secret)
   const signature = await crypto.subtle.sign(signConfig.algorithm.name, key, new TextEncoder().encode(value))
   // the returned base64 encoded signature will always be 44 characters long and end with one or two equal signs
-  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+  return bytesToBase64(signature as ArrayBuffer)
 }
 
 const verifySignature = async (
@@ -89,12 +98,13 @@ const verifySignature = async (
   secret: CryptoKey
 ): Promise<boolean> => {
   try {
-    const signatureBinStr = atob(base64Signature)
-    const signature = new Uint8Array(signatureBinStr.length)
-    for (let i = 0, len = signatureBinStr.length; i < len; i++) {
-      signature[i] = signatureBinStr.charCodeAt(i)
-    }
-    return await crypto.subtle.verify(signConfig.algorithm, secret, signature, new TextEncoder().encode(value))
+    const signatureBytes = base64ToBytes(base64Signature)
+    return await crypto.subtle.verify(
+      signConfig.algorithm,
+      secret,
+      signatureBytes.buffer as ArrayBuffer,
+      new TextEncoder().encode(value)
+    )
   } catch {
     return false
   }
@@ -124,6 +134,7 @@ export const generateSignedCookie = async (name: string, value: string, secret: 
   }
   return cookie
 }
+
 export const generateCookie = (name: string, value: string, opt?: CookieOptions): string => {
   // Cookie names prefixed with __Secure- can be used only if they are set with the secure attribute.
   // Cookie names prefixed with __Host- can be used only if they are set with the secure attribute, must have a path of / (meaning any path at the host)
@@ -152,8 +163,7 @@ export const serializeSigned = async (
   opt: CookieOptions = {}
 ): Promise<string> => {
   const signature = await makeSignature(value, secret)
-  value = `${value}.${signature}`
-  value = encodeURIComponent(value)
+  value = encodeURIComponent(`${value}.${signature}`)
   return _serialize(name, value, opt)
 }
 
@@ -199,7 +209,7 @@ const _serialize = (name: string, value: string, opt: CookieOptions = {}): strin
         'Cookies Max-Age SHOULD NOT be greater than 400 days (34560000 seconds) in duration.'
       )
     }
-    cookie += `; Max-Age=${opt.maxAge | 0}`
+    cookie += `; Max-Age=${Math.floor(opt.maxAge)}`
   }
 
   if (opt.domain && opt.prefix !== 'host') {

@@ -10,7 +10,7 @@ export default defineConfig([
     sourcemap: false,
     clean: true,
     minify: false,
-    bundle: false,
+    bundle: true,
     outDir: 'dist/esm',
     target: 'es2020',
     esbuildOptions (options) {
@@ -22,12 +22,12 @@ export default defineConfig([
   {
     entry: ['src/index.ts'],
     format: 'cjs',
-    dts: false,
+    dts: true,
     splitting: false,
     sourcemap: false,
     clean: true,
     minify: false,
-    bundle: false,
+    bundle: true,
     outDir: 'dist/cjs',
     target: 'es2020',
     outExtension () {

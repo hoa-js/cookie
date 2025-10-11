@@ -1,31 +1,16 @@
 /// <reference path="./extension.d.ts" />
 
 export interface GetCookie {
-  (): Cookie;
-  (name: string): string | undefined;
-  (name: string, prefixOptions: CookiePrefixOptions): string | undefined;
+  (name: string): Promise<string | undefined | false>;
+  (name: string, opts: { prefix?: CookiePrefixOptions; signed?: boolean }): Promise<string | undefined | false>;
 }
 
 export interface SetCookie {
-  (name: string, value: string, options?: CookieOptions): void;
+  (name: string, value: string, options?: CookieOptions): Promise<void>;
 }
 
 export interface DeleteCookie {
-  (name: string, options?: CookieOptions): string | undefined;
-}
-
-export interface GetSignedCookie {
-  (): Promise<SignedCookie>;
-  (name: string): Promise<string | undefined | false>;
-  (name: string, prefixOptions: CookiePrefixOptions): Promise<string | undefined | false>;
-}
-
-export interface SetSignedCookie {
-  (
-    name: string,
-    value: string,
-    opt?: CookieOptions
-  ): Promise<void>;
+  (name: string): Promise<void>;
 }
 
 export type Cookie = Record<string, string>
@@ -61,6 +46,7 @@ export type CookieOptions = {
   partitioned?: boolean
   priority?: 'Low' | 'Medium' | 'High' | 'low' | 'medium' | 'high'
   prefix?: CookiePrefixOptions
+  signed?: boolean
 } & PartitionedCookieConstraint
 
 export type CookieConstraint<Name> = Name extends `__Secure-${string}`
