@@ -28,10 +28,6 @@ const DEFAULT_ADAPTER_OPTIONS: CookieAdapterOptions = {
 }
 
 export function cookie (options: CookieAdapterOptions = DEFAULT_ADAPTER_OPTIONS) {
-  if ((options.defaultOptions?.signed) && !options.secret) {
-    throw new Error('secret is required when signed is true')
-  }
-
   return function cookieExtension (app: any) {
     const getCookie = async function getCookie (
       name: string,
@@ -51,24 +47,24 @@ export function cookie (options: CookieAdapterOptions = DEFAULT_ADAPTER_OPTIONS)
 
       if (signed) {
         if (!cookieHeader || !options.secret) return undefined
-        const finalName = resolveNameWithPrefix(name) as string
-        const obj = await parseSignedCookie(cookieHeader, options.secret, finalName)
-        return (obj as SignedCookie)[finalName]
+        const cookieName = resolveNameWithPrefix(name) as string
+        const obj = await parseSignedCookie(cookieHeader, options.secret, cookieName)
+        return (obj as SignedCookie)[cookieName]
       }
 
       // unsigned
       if (!cookieHeader) return undefined
-      const finalName = resolveNameWithPrefix(name) as string
-      const obj = parseCookie(cookieHeader, finalName)
-      return (obj as Cookie)[finalName]
+      const cookieName = resolveNameWithPrefix(name) as string
+      const obj = parseCookie(cookieHeader, cookieName)
+      return (obj as Cookie)[cookieName]
     } as unknown as GetCookie
 
-    const setCookie = async function setCookie (name: string, value: string, opts?: CookieOptions) {
+    const setCookie = async function setCookie (name: string, value: string, opts: CookieOptions = {}) {
       if (!name || (value == null)) return
 
-      const cookieOptions = opts || options.defaultOptions
-      const isSigned = Boolean(cookieOptions?.signed)
-      if (isSigned) {
+      const cookieOptions = { ...options.defaultOptions, ...opts }
+      const signed = cookieOptions?.signed === true
+      if (signed) {
         if (!options.secret) {
           throw new Error('secret is required when signed is true')
         }
@@ -76,6 +72,8 @@ export function cookie (options: CookieAdapterOptions = DEFAULT_ADAPTER_OPTIONS)
         this.append('Set-Cookie', cookie)
         return
       }
+
+      // unsigned
       const cookie = generateCookie(name, value, cookieOptions)
       this.append('Set-Cookie', cookie)
     } as unknown as SetCookie

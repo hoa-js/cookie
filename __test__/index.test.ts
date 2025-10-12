@@ -3,14 +3,9 @@ import type { HoaContext, NextFunction } from 'hoa'
 import { cookie } from '../src/index.ts'
 import { parseCookie, serializeSigned } from '../src/cookie.ts'
 import { describe, it, expect, beforeEach } from '@jest/globals'
+import type { CookieOptions } from '../src/types/index.ts'
 
 describe('Adapter behavior edge cases', () => {
-  it('Should throw when defaultOptions.signed is true but secret is missing', () => {
-    expect(() => {
-      cookie({ defaultOptions: { signed: true } })
-    }).toThrow('secret is required when signed is true')
-  })
-
   it('Should return undefined for getCookie by name when no Cookie header (unsigned and signed)', async () => {
     const app = new Hoa()
     app.extend(cookie())
@@ -47,8 +42,7 @@ describe('Cookie adapter mounting test', () => {
   beforeEach(() => {
     app = new Hoa()
     app.extend(cookie({
-      secret: '123456',
-      signed: true
+      secret: '123456'
     }))
   })
 
@@ -270,5 +264,49 @@ describe('More getCookie branches for index.ts', () => {
     const setCookies = response.headers.getSetCookie()
     expect(Array.isArray(setCookies)).toBe(true)
     expect(setCookies.length).toBe(0)
+  })
+})
+
+describe('Index.ts additional branches to reach 100% coverage', () => {
+  it('setCookie should be no-op when name is empty or value is null/undefined', async () => {
+    const app = new Hoa()
+    app.extend(cookie())
+    app.use(async (ctx: HoaContext, _next: NextFunction) => {
+      await ctx.res.setCookie('', 'v')
+      await ctx.res.setCookie('a', undefined as any)
+      await ctx.res.setCookie('b', null as any)
+      ctx.res.status = 204
+    })
+    const response = await app.fetch(new Request('http://localhost', { method: 'GET' }))
+    expect(response.status).toBe(204)
+    const setCookies = response.headers.getSetCookie()
+    expect(Array.isArray(setCookies)).toBe(true)
+    expect(setCookies.length).toBe(0)
+  })
+
+  it('getCookie signed:true returns undefined when adapter secret is missing, even if Cookie header exists', async () => {
+    const app = new Hoa()
+    app.extend(cookie())
+    // Build a signed cookie header string (will not be used since secret missing)
+    const signedPair = await serializeSigned('s1', 'x', '123456')
+    app.use(async (ctx: HoaContext, _next: NextFunction) => {
+      const v = await ctx.req.getCookie('s1', { signed: true })
+      expect(v).toBeUndefined()
+      ctx.res.status = 204
+    })
+    const response = await app.fetch(new Request('http://localhost', { method: 'GET', headers: { Cookie: signedPair.split(';')[0] } }))
+    expect(response.status).toBe(204)
+  })
+
+  it('setCookie should throw when signed:true but adapter secret is missing', async () => {
+    const app = new Hoa()
+    app.extend(cookie())
+    const fn = app.HoaResponse.prototype.setCookie as unknown as (
+      this: { append: (h: string, v: string) => void },
+      name: string,
+      value: string,
+      opts?: CookieOptions
+    ) => Promise<void>
+    await expect(fn.call({ append: (_h: string, _v: string) => {} }, 'x', 'y', { signed: true })).rejects.toThrow('secret is required when signed is true')
   })
 })
