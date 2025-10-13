@@ -3,9 +3,11 @@ import { defineConfig } from 'tsup'
 export default defineConfig([
   // ESM build
   {
-    entry: ['src/index.ts'],
+    entry: ['src/index.ts', './src/types/extension.d.ts'],
     format: 'esm',
-    dts: true,
+    dts: {
+      resolve: true
+    },
     splitting: false,
     sourcemap: false,
     clean: true,
@@ -20,9 +22,11 @@ export default defineConfig([
   },
   // CJS build
   {
-    entry: ['src/index.ts'],
+    entry: ['src/index.ts', './src/types/extension.d.ts'],
     format: 'cjs',
-    dts: true,
+    dts: {
+      resolve: true
+    },
     splitting: false,
     sourcemap: false,
     clean: true,
