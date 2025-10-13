@@ -1,4 +1,4 @@
-/// <reference path="./extension.d.ts" />
+import './extension'
 
 export interface GetCookie {
   (name: string): Promise<string | undefined | false>;
