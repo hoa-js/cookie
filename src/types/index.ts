@@ -1,4 +1,4 @@
-import './extension'
+import './extension.d.ts'
 
 export interface GetCookie {
   (name: string): Promise<string | undefined | false>;
